@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 import html2text
 from datetime import datetime, timedelta
 import re
+import chromadb
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
@@ -86,7 +87,19 @@ def authenticate_gmail():
 def get_emails(
     service, emails: list[str], max_results: int = 100, timedelta_days: int = 7
 ) -> list[dict]:
-    """This function retrieves emails from Gmail API and checks the available format (plain text or HTML)."""
+    """This function get gmail API client and emails and some params. The create apprioriate query, transform messages and
+    store information about emails.
+
+    Args:
+        service (_type_): gmail API client
+        emails (list[str]): list of emails (in my example newsletters)
+        max_results (int, optional): maximum number of emails fetched from your inbox. Defaults to 100.
+        timedelta_days (int, optional): duration of time, which will be used to fetched emails. Defaults to 7.
+
+    Returns:
+        list[dict]: list of emails. This object will be presented as dictionaries. This entites will contains subject,
+        email adrress and body of the message
+    """
     # Get emails from the past `timedelta_days` days
     date_7_days = datetime.now() - timedelta(days=timedelta_days)
     query = f"from:({' OR '.join(emails)}) after:{date_7_days.strftime('%Y/%m/%d')}"
@@ -147,6 +160,7 @@ def get_emails(
         
         # Append the email data to the result list
         email_data.append({
+            "id": msg["id"],
             "subject": subject,
             "from": sender,
             "body": clean_email_text(extract_clean_text(body.strip())),
@@ -156,6 +170,32 @@ def get_emails(
 
     return email_data
 
+def updated_chromadb(emails: list[dict]) -> None:
+    """This function add new documents to chromadb only if emails have a different messages ids
+    (avoid duplication). For that collect existed ids from db and remove any email with the same
+    ids.
+
+    Args:
+        emails (list[dict]): list of dicts, which describe emails entites (body, subject etc.)
+    """
+    ids = [email["id"] for email in emails]
+    
+    chroma_client = chromadb.PersistentClient(path="./chromadb")
+    collection = chroma_client.get_or_create_collection(name="emails")
+    existing_ids = collection.get(ids=ids, include=[])
+    existing_ids_set = set(existing_ids['ids'])
+    new_emails = [email for email in emails if email["id"] not in existing_ids_set]
+
+    
+    if new_emails:
+        collection.add(
+            documents=[email["body"] for email in new_emails],
+            ids=[email["id"] for email in new_emails],
+            metadatas=[{"subject": email["subject"], "from": email["from"]} for email in new_emails]
+        )
+        print("Database was updated!")
+    else:
+        print("Database was not updated! Nothing new :(")
 
 if __name__ == "__main__":
     load_dotenv()
@@ -163,8 +203,4 @@ if __name__ == "__main__":
     emails = os.getenv("EMAIL_LIST").split(",")
 
     emails = get_emails(service, emails)
-    documents = [email["body"] for email in emails]
-    ids = [f"ids_{i + 1}" for i in range(len(emails))]
-
-    for email in emails:
-        print(email["body"])
+    updated_chromadb(emails)
