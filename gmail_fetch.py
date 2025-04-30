@@ -119,6 +119,13 @@ def get_emails(
 
         subject = next((h["value"] for h in headers if h["name"] == "Subject"), "")
         sender = next((h["value"] for h in headers if h["name"] == "From"), "")
+        date_raw = next((h["value"] for h in headers if h["name"] == "Date"), "")
+
+        try:
+            date_obj = datetime.strptime(date_raw, "%a, %d %b %Y %H:%M:%S %z")
+            formatted_date = date_obj.strftime("%d:%m:%Y")
+        except ValueError:
+            formatted_date = datetime.now().strftime("%d:%m:%Y")
 
         body = ""
         plain_text_body = ""
@@ -171,7 +178,8 @@ def get_emails(
             "from": sender,
             "body": clean_email_text(extract_clean_text(body.strip())),
             "plain_text_available": plain_text_found,
-            "html_available": html_found
+            "html_available": html_found,
+            "date": formatted_date,
         })
 
     return email_data
@@ -198,7 +206,7 @@ def updated_chromadb(emails: list[dict]) -> None:
         collection.add(
             documents=[email["body"] for email in new_emails],
             ids=[email["id"] for email in new_emails],
-            metadatas=[{"subject": email["subject"], "from": email["from"]} for email in new_emails]
+            metadatas=[{"subject": email["subject"], "from": email["from"], "date": email["date"]} for email in new_emails]
         )
         print("Database was updated!")
     else:
