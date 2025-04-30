@@ -87,24 +87,21 @@ def authenticate_gmail():
 def get_emails(
     service, emails: list[str], max_results: int = 100, timedelta_days: int = 7
 ) -> list[dict]:
-    """This function get gmail API client and emails and some params. The create apprioriate query, transform messages and
-    store information about emails.
+    """Fetch emails from specified senders within a time range using the Gmail API.
 
     Args:
-        service (_type_): gmail API client
-        emails (list[str]): list of emails (in my example newsletters)
-        max_results (int, optional): maximum number of emails fetched from your inbox. Defaults to 100.
-        timedelta_days (int, optional): duration of time, which will be used to fetched emails. Defaults to 7.
+        service: Gmail API client.
+        emails (list[str]): List of sender email addresses.
+        max_results (int): Max number of emails to retrieve.
+        timedelta_days (int): How many days back to look for emails.
 
     Returns:
-        list[dict]: list of emails. This object will be presented as dictionaries. This entites will contains subject,
-        email adrress and body of the message
+        list[dict]: Cleaned email contents including subject, sender, and body.
     """
     # Get emails from the past `timedelta_days` days
     date_7_days = datetime.now() - timedelta(days=timedelta_days)
     query = f"from:({' OR '.join(emails)}) after:{date_7_days.strftime('%Y/%m/%d')}"
     
-    # Fetch email list using Gmail API
     results = (
         service.users()
         .messages()
@@ -124,41 +121,50 @@ def get_emails(
         sender = next((h["value"] for h in headers if h["name"] == "From"), "")
 
         body = ""
+        plain_text_body = ""
+        html_body = ""
         plain_text_found = False
         html_found = False
         
         parts = payload.get("parts", [])
-        
-        # Case 1: If parts are present (multipart email)
+
         if parts:
             for part in parts:
                 mime_type = part.get("mimeType", "")
-                if mime_type == "text/plain":
-                    data = part["body"]["data"]
-                    body = base64.urlsafe_b64decode(data.encode("UTF-8")).decode("utf-8")
-                    plain_text_found = True
-                    break
-                
+                data = part.get("body", {}).get("data")
+                if not data:
+                    continue
+
+                decoded_data = base64.urlsafe_b64decode(data.encode("UTF-8")).decode("utf-8")
+
                 if mime_type == "text/html":
-                    data = part["body"]["data"]
-                    body = base64.urlsafe_b64decode(data.encode("UTF-8")).decode("utf-8")
+                    html_body = decoded_data
                     html_found = True
 
-        # Case 2: If no parts (single-part email, plain text or HTML directly in the body)
-        if not parts:
+                elif mime_type == "text/plain":
+                    plain_text_body = decoded_data
+                    plain_text_found = True
+
+        else:
+            # No parts – body is directly available
             data = payload.get("body", {}).get("data")
             if data:
-                body = base64.urlsafe_b64decode(data.encode("UTF-8")).decode("utf-8")
-                if "<html>" in body.lower():
+                decoded_data = base64.urlsafe_b64decode(data.encode("UTF-8")).decode("utf-8")
+                if "<html>" in decoded_data.lower():
+                    html_body = decoded_data
                     html_found = True
                 else:
+                    plain_text_body = decoded_data
                     plain_text_found = True
 
-        # If no plain text found but HTML is found, fallback to HTML
-        if not plain_text_found and html_found:
-            body = body
-        
-        # Append the email data to the result list
+        # Choose best version to display
+        if html_found:
+            body = html_body
+        elif plain_text_found:
+            body = plain_text_body
+        else:
+            body = ""
+
         email_data.append({
             "id": msg["id"],
             "subject": subject,
@@ -169,6 +175,7 @@ def get_emails(
         })
 
     return email_data
+
 
 def updated_chromadb(emails: list[dict]) -> None:
     """This function add new documents to chromadb only if emails have a different messages ids
