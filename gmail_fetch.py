@@ -193,14 +193,17 @@ def update_chromadb(emails: list[dict]) -> str:
     Args:
         emails (list[dict]): list of dicts, which describe emails entites (body, subject etc.)
     """
-    ids = [email["id"] for email in emails]
-    
     chroma_client = chromadb.PersistentClient(path="./chromadb")
+    
+    ids = [email["id"] for email in emails]
     collection = chroma_client.get_or_create_collection(name="emails")
-    existing_ids = collection.get(ids=ids, include=[])
-    existing_ids_set = set(existing_ids['ids'])
-    new_emails = [email for email in emails if email["id"] not in existing_ids_set]
-
+    
+    if collection.count() > 0:
+        existing_ids = collection.get(ids=ids, include=[])
+        existing_ids_set = set(existing_ids['ids'])
+        new_emails = [email for email in emails if email["id"] not in existing_ids_set]
+    else:
+        new_emails = emails
     
     if new_emails:
         collection.add(
@@ -208,7 +211,7 @@ def update_chromadb(emails: list[dict]) -> str:
             ids=[email["id"] for email in new_emails],
             metadatas=[{"subject": email["subject"], "from": email["from"], "date": email["date"]} for email in new_emails]
         )
-        return "Database was updated!"
+        return f"Database was updated with {len(new_emails)} new emails!"
     else:
         return "Database was not updated! Nothing new :("
 
