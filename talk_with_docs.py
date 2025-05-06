@@ -6,7 +6,7 @@ import os
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from time import sleep
-
+import streamlit as st
 
 def get_response_from_llm(gemini_client: genai.Client, prompt: str, system_prompt: str, generation_config: dict, sleep_time: int = 2) -> str:
     """This function generate response to user prompt. Also if API server is overloaded, function will retry API call with
@@ -40,7 +40,7 @@ def get_response_from_llm(gemini_client: genai.Client, prompt: str, system_promp
     return response.text
 
 
-def summarize_emails(timedelta_int: int, count_tokens: bool = False) -> str:
+def summarize_emails(timedelta_int: int, generation_config: dict, api_key: str, count_tokens: bool = False) -> str:
     """This function will summarize retrieved documents from specified interval. Data are gathered from chromdb. So 
     if in database documents not appear, function will return comment to user.
     Args:
@@ -68,15 +68,9 @@ def summarize_emails(timedelta_int: int, count_tokens: bool = False) -> str:
     if not docs:
         return "You have no documents to summarize! Please add some to database!"
     
-    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-    gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+    gemini_client = genai.Client(api_key=api_key)
 
     prompt = f"Summarize documents: \n {'\n'.join(docs)} "
-
-    generation_config = {
-        "max_output_tokens" : 1000,
-        "temperature" : 0.1,
-    }
 
     response = get_response_from_llm(gemini_client, prompt, system_prompt, generation_config)
 
@@ -84,10 +78,11 @@ def summarize_emails(timedelta_int: int, count_tokens: bool = False) -> str:
         tokenizer = tiktoken.get_encoding("cl100k_base")
 
         tokens = tokenizer.encode(prompt)
-        print(f"Token count: {len(tokens)}")
-    return response
+        return response, len(tokens)
+    return response, None
 
-def simple_rag(query: str, count_tokens: bool = False) -> str:
+@st.cache_data
+def simple_rag(query: str, generation_config: dict, api_key: str, count_tokens: bool = False, n_results: int = 2) -> str:
     """This function will respnse to user query, based on retrieved documents from chromadb. If there is no documents model should
     inform user, that question is based on his embeded knowledge.
 
@@ -112,17 +107,11 @@ v
 
     results = collection.query(
         query_texts=[query],
-        n_results=2
+        n_results=n_results,
     )
     prompt = prompt.format(query=query, documents="\n".join(results["documents"][0]))
 
-    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-    gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-
-    generation_config = {
-        "max_output_tokens" : 5000,
-        "temperature" : 0.1,
-    }
+    gemini_client = genai.Client(api_key=api_key)
 
     response = get_response_from_llm(gemini_client, prompt, system_prompt, generation_config)
 
@@ -130,12 +119,17 @@ v
         tokenizer = tiktoken.get_encoding("cl100k_base")
 
         tokens = tokenizer.encode(prompt)
-        print(f"Token count: {len(tokens)}")
+        return response, len(tokens)
 
-    return response
+    return response, None
 if __name__ == "__main__":
     load_dotenv()
     query = "What is the kernel trick?"
-    print(summarize_emails(10, count_tokens=True))
-    #print(simple_rag(query, count_tokens=True))
+
+    generation_config = {
+        "max_output_tokens" : 1000,
+        "temperature" : 0.1,
+    }
+    #print(summarize_emails(10, generation_config=generation_config, count_tokens=True))
+    #print(simple_rag(query, generation_config=generation_config, count_tokens=True))
 

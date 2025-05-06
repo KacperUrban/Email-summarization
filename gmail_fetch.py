@@ -185,7 +185,7 @@ def get_emails(
     return email_data
 
 
-def updated_chromadb(emails: list[dict]) -> None:
+def update_chromadb(emails: list[dict]) -> str:
     """This function add new documents to chromadb only if emails have a different messages ids
     (avoid duplication). For that collect existed ids from db and remove any email with the same
     ids.
@@ -208,9 +208,9 @@ def updated_chromadb(emails: list[dict]) -> None:
             ids=[email["id"] for email in new_emails],
             metadatas=[{"subject": email["subject"], "from": email["from"], "date": email["date"]} for email in new_emails]
         )
-        print("Database was updated!")
+        return "Database was updated!"
     else:
-        print("Database was not updated! Nothing new :(")
+        return "Database was not updated! Nothing new :("
 
 if __name__ == "__main__":
     load_dotenv()
@@ -218,4 +218,4 @@ if __name__ == "__main__":
     emails = os.getenv("EMAIL_LIST").split(",")
 
     emails = get_emails(service, emails)
-    updated_chromadb(emails)
+    print(update_chromadb(emails))
