@@ -2,7 +2,6 @@ import chromadb
 import tiktoken
 from google import genai
 from google.genai import types
-import os
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from time import sleep
@@ -75,10 +74,11 @@ def summarize_emails(timedelta_int: int, generation_config: dict, api_key: str, 
     response = get_response_from_llm(gemini_client, prompt, system_prompt, generation_config)
 
     if count_tokens:
-        tokenizer = tiktoken.get_encoding("cl100k_base")
-
-        tokens = tokenizer.encode(prompt)
-        return response, len(tokens)
+        num_of_tokens = gemini_client.models.count_tokens(
+            model="gemini-2.0-flash", contents=prompt
+        )
+        print(type(num_of_tokens))
+        return response, num_of_tokens.total_tokens
     return response, None
 
 @st.cache_data
@@ -116,10 +116,10 @@ v
     response = get_response_from_llm(gemini_client, prompt, system_prompt, generation_config)
 
     if count_tokens:
-        tokenizer = tiktoken.get_encoding("cl100k_base")
-
-        tokens = tokenizer.encode(prompt)
-        return response, len(tokens)
+        num_of_tokens = gemini_client.models.count_tokens(
+            model="gemini-2.0-flash", contents=prompt
+        )
+        return response, num_of_tokens.total_tokens
 
     return response, None
 if __name__ == "__main__":

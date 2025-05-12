@@ -13,7 +13,6 @@ Short demo video you can find under this [link](https://youtu.be/JFdNEP_YE5w?si=
 # Techonologies
 * Google API
 * Gemini API
-* tiktoken
 * chromadb
 * streamlit
 * regex
